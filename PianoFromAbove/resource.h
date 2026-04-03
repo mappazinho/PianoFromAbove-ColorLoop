@@ -109,6 +109,7 @@
 #define IDC_TRACKCOLOR15                1111
 #define IDC_TRACKCOLOR16                1112
 #define IDC_RAINBOW                     1113
+#define IDC_LOADCONFIG                  1114
 #define ID_FILE_PLAYFILE                40001
 #define ID_FILE_ADDFILE                 40002
 #define ID_FILE_ADDFOLDER               40003
@@ -219,7 +220,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        151
 #define _APS_NEXT_COMMAND_VALUE         40173
-#define _APS_NEXT_CONTROL_VALUE         1114
+#define _APS_NEXT_CONTROL_VALUE         1115
 #define _APS_NEXT_SYMED_VALUE           102
 #endif
 #endif

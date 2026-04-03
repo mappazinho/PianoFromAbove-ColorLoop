@@ -242,6 +242,7 @@ public:
     // Interface
     void LoadDefaultValues();
     void LoadConfigValues();
+    bool LoadConfigValues( const string &sFilename );
     void LoadConfigValues( TiXmlElement *txRoot );
     bool SaveConfigValues();
     bool SaveConfigValues( TiXmlElement *txRoot );

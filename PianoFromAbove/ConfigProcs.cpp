@@ -144,6 +144,140 @@ namespace
             rcOwner.top + ( rcOwner.bottom - rcOwner.top - rcDlg.bottom ) / 2,
             0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOREDRAW | SWP_NOACTIVATE );
     }
+
+    VOID SetVideoProc( HWND hWnd, const VideoSettings &cVideo )
+    {
+        CheckRadioButton( hWnd, IDC_DIRECT3D, IDC_GDI, IDC_DIRECT3D + cVideo.eRenderer );
+        CheckDlgButton( hWnd, IDC_DISPLAYFPS, cVideo.bShowFPS ? BST_CHECKED : BST_UNCHECKED );
+        CheckDlgButton( hWnd, IDC_LIMITFPS, cVideo.bLimitFPS ? BST_CHECKED : BST_UNCHECKED );
+    }
+
+    VOID SetControlsProc( HWND hWnd, const ControlsSettings &cControls )
+    {
+        static int pIds[] = { ID_PLAY_PLAYPAUSE, ID_PLAY_STOP, ID_PLAY_SKIPFWD, ID_PLAY_SKIPBACK,
+                              ID_PLAY_LOOP, ID_PLAY_INCREASERATE, ID_PLAY_DECREASERATE, ID_PLAY_RESETRATE };
+
+        for ( int i = 0; i < sizeof( pIds ) / sizeof( int ); i++ )
+        {
+            HWND hWndBtn = GetDlgItem( hWnd, pIds[i] );
+            SetWindowLongPtr( hWndBtn, GWLP_USERDATA, -1 );
+            InvalidateRect( hWndBtn, NULL, TRUE );
+        }
+
+        for ( int i = 0; i < 128; i++ )
+            if ( cControls.aKeyboardMap[i] > 0 )
+            {
+                HWND hWndBtn = GetDlgItem( hWnd, cControls.aKeyboardMap[i] + 33 );
+                SetWindowLongPtr( hWndBtn, GWLP_USERDATA, i );
+                InvalidateRect( hWndBtn, NULL, TRUE );
+            }
+
+        TCHAR buf[32];
+        _stprintf_s( buf, TEXT( "%g" ), cControls.dFwdBackSecs );
+        SetWindowText( GetDlgItem( hWnd, IDC_LRARROWS ), buf );
+        _stprintf_s( buf, TEXT( "%g" ), cControls.dSpeedUpPct );
+        SetWindowText( GetDlgItem( hWnd, IDC_UDARROWS ), buf );
+    }
+
+    VOID SetLibraryProc( HWND hWnd, const SongLibrary &cLibrary )
+    {
+        CheckDlgButton( hWnd, IDC_ALWAYSADD, cLibrary.GetAlwaysAdd() ? BST_CHECKED : BST_UNCHECKED );
+
+        HWND hWndLibrary = GetDlgItem( hWnd, IDC_LIBRARY );
+        SendMessage( hWndLibrary, LVM_DELETEALLITEMS, 0, 0 );
+
+        const map< wstring, SongLibrary::Source > &mSources = cLibrary.GetSources();
+        LVITEM lvi = { 0 };
+        lvi.mask = LVIF_TEXT;
+        lvi.iItem = -1;
+
+        for ( map< wstring, SongLibrary::Source >::const_iterator it = mSources.begin(); it != mSources.end(); ++it )
+        {
+            lvi.iItem++;
+            lvi.iSubItem = 0;
+            lvi.pszText = ( LPTSTR )( it->first.c_str() );
+            lvi.iItem = ( int )SendMessage( hWndLibrary, LVM_INSERTITEM, 0, ( LPARAM )&lvi );
+            if ( it->second != SongLibrary::File )
+            {
+                lvi.iSubItem = 1;
+                lvi.pszText = it->second == SongLibrary::Folder ? TEXT( "No" ) : TEXT( "Yes" );
+                SendMessage( hWndLibrary, LVM_SETITEM, 0, ( LPARAM )&lvi );
+            }
+        }
+    }
+
+    VOID RefreshPreferencesUI( HWND hWndPage )
+    {
+        Config &config = Config::GetConfig();
+        HWND hWndProp = GetParent( hWndPage );
+        if ( !hWndProp ) return;
+
+        HWND hWndVisual = PropSheet_IndexToHwnd( hWndProp, 0 );
+        HWND hWndAudio = PropSheet_IndexToHwnd( hWndProp, 1 );
+        HWND hWndControls = PropSheet_IndexToHwnd( hWndProp, 2 );
+        HWND hWndLibrary = PropSheet_IndexToHwnd( hWndProp, 3 );
+
+        if ( hWndVisual ) SetVisualProc( hWndVisual, config.GetVisualSettings() );
+        if ( hWndAudio ) SetAudioProc( hWndAudio, config.GetAudioSettings() );
+        if ( hWndControls ) SetControlsProc( hWndControls, config.GetControlsSettings() );
+        if ( hWndLibrary ) SetLibraryProc( hWndLibrary, config.GetSongLibrary() );
+    }
+
+    VOID ApplyImportedConfigToUI()
+    {
+        Config &config = Config::GetConfig();
+        PlaybackSettings &cPlayback = config.GetPlaybackSettings();
+        ViewSettings &cView = config.GetViewSettings();
+
+        cView.SetLibrary( cView.GetLibrary(), true );
+        cView.SetControls( cView.GetControls(), true );
+        cView.SetKeyboard( cView.GetKeyboard(), true );
+        cView.SetNoteLabels( cView.GetNoteLabels(), true );
+        cView.SetOnTop( cView.GetOnTop(), true );
+
+        cPlayback.SetMute( cPlayback.GetMute(), true );
+        cPlayback.SetNSpeed( cPlayback.GetNSpeed(), true );
+        cPlayback.SetVolume( cPlayback.GetVolume(), true );
+        cPlayback.SetMetronome( cPlayback.GetMetronome(), true );
+        cPlayback.SetLearnMode( cPlayback.GetLearnMode(), true );
+
+        PopulateLibrary( GetDlgItem( g_hWndLibDlg, IDC_LIBRARYFILES ) );
+        HandOffMsg( WM_DEVICECHANGE, 0, 0 );
+        HandOffMsg( WM_COMMAND, ID_VISUAL_TRACKCOLORS_CHANGED, 0 );
+        HandOffMsg( WM_COMMAND, ID_VIEW_RESETDEVICE, 0 );
+    }
+
+    BOOL ImportConfigFile( HWND hWnd )
+    {
+        OPENFILENAME ofn = { 0 };
+        TCHAR sFilename[MAX_PATH] = { 0 };
+        string sFolder = Config::GetFolder();
+        wstring wsFolder = Util::StringToWstring( sFolder );
+
+        ofn.lStructSize = sizeof( OPENFILENAME );
+        ofn.hwndOwner = hWnd;
+        ofn.lpstrFilter = TEXT( "XML Files\0*.xml\0Config Files\0Config.xml\0All Files\0*.*\0" );
+        ofn.lpstrFile = sFilename;
+        ofn.nMaxFile = MAX_PATH;
+        ofn.lpstrTitle = TEXT( "Select a config.xml file to import" );
+        ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+        if ( wsFolder.length() > 0 )
+            ofn.lpstrInitialDir = wsFolder.c_str();
+        if ( !GetOpenFileName( &ofn ) ) return FALSE;
+
+        Config &config = Config::GetConfig();
+        if ( !config.LoadConfigValues( Util::WstringToString( sFilename ) ) )
+        {
+            MessageBox( hWnd, TEXT( "The selected config file could not be loaded." ), TEXT( "Error" ), MB_OK | MB_ICONEXCLAMATION );
+            return FALSE;
+        }
+
+        config.SaveConfigValues();
+        RefreshPreferencesUI( hWnd );
+        ApplyImportedConfigToUI();
+        MessageBox( hWnd, TEXT( "Config imported." ), TEXT( "Piano From Above" ), MB_OK | MB_ICONINFORMATION );
+        return TRUE;
+    }
 }
 
 INT_PTR WINAPI VisualProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
@@ -218,6 +352,9 @@ INT_PTR WINAPI VisualProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
                 }
                 case IDC_TRACKCOLORS:
                     DialogBoxParam( g_hInstance, MAKEINTRESOURCE( IDD_TRACKCOLORS ), hWnd, TrackColorsProc, ( LPARAM )hWnd );
+                    return TRUE;
+                case IDC_LOADCONFIG:
+                    ImportConfigFile( hWnd );
                     return TRUE;
                 case IDC_BKGCOLOR:
                 {
@@ -538,11 +675,7 @@ INT_PTR WINAPI VideoProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
             // Config to fill out the form
             Config &config = Config::GetConfig();
             const VideoSettings &cVideo = config.GetVideoSettings();
-
-            CheckRadioButton( hWnd, IDC_DIRECT3D, IDC_GDI, IDC_DIRECT3D + cVideo.eRenderer );
-            CheckDlgButton( hWnd, IDC_DISPLAYFPS, cVideo.bShowFPS ? BST_CHECKED : BST_UNCHECKED );
-            CheckDlgButton( hWnd, IDC_LIMITFPS, cVideo.bLimitFPS ? BST_CHECKED : BST_UNCHECKED );
-
+            SetVideoProc( hWnd, cVideo );
             return TRUE;
         }
         case WM_COMMAND:
@@ -591,27 +724,8 @@ INT_PTR WINAPI ControlsProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
         {
             // Config to fill out the form
             Config &config = Config::GetConfig();
-            const ControlsSettings &cControls = config.GetControlsSettings();
             hWndHotItem = NULL;
-
-            // Turn them all off
-            for ( int i = 0; i < sizeof( pIds ) / sizeof( int ); i++ )
-                SetWindowLongPtr( GetDlgItem( hWnd, pIds[i] ), GWLP_USERDATA, -1 );
-
-            // Turn on those specified in settings
-            for ( int i = 0; i < 128; i++ )
-                if ( cControls.aKeyboardMap[i] > 0 )
-                    SetWindowLongPtr( GetDlgItem( hWnd, cControls.aKeyboardMap[i] + 33 ), GWLP_USERDATA, i );
-
-            HWND hWndFwdBack = GetDlgItem( hWnd, IDC_LRARROWS );
-            HWND hWndSpeedPct = GetDlgItem( hWnd, IDC_UDARROWS );
-
-            // Edit boxes
-            TCHAR buf[32];
-            _stprintf_s( buf, TEXT( "%g" ), cControls.dFwdBackSecs );
-            SetWindowText( hWndFwdBack, buf );
-            _stprintf_s( buf, TEXT( "%g" ), cControls.dSpeedUpPct );
-            SetWindowText( hWndSpeedPct, buf );
+            SetControlsProc( hWnd, config.GetControlsSettings() );
             
             return TRUE;
         }
@@ -848,9 +962,6 @@ INT_PTR WINAPI LibraryProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
             // Config to fill out the form
             Config &config = Config::GetConfig();
             const SongLibrary &cLibrary = config.GetSongLibrary();
-            const map< wstring, SongLibrary::Source > &mSources = cLibrary.GetSources();
-
-            CheckDlgButton( hWnd, IDC_ALWAYSADD, cLibrary.GetAlwaysAdd() ? BST_CHECKED : BST_UNCHECKED );
 
             // Set up the list view
             RECT rc;
@@ -871,24 +982,7 @@ INT_PTR WINAPI LibraryProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
             lvc.pszText = TEXT( "Subfolders?" );
             SendMessage( hWndLibrary, LVM_INSERTCOLUMN, 1, ( LPARAM )&lvc );
 
-            // Add the library sources
-            LVITEM lvi;
-            lvi.mask = LVIF_TEXT;
-            lvi.iItem = -1;
-            for ( map< wstring, SongLibrary::Source >::const_iterator it = mSources.begin(); it != mSources.end(); ++it )
-            {
-                lvi.iItem++;
-                lvi.iSubItem = 0;
-                lvi.pszText = ( LPTSTR )( it->first.c_str() );
-                lvi.iItem = (int)SendMessage( hWndLibrary, LVM_INSERTITEM, 0, ( LPARAM )&lvi );
-                if ( it->second != SongLibrary::File )
-                {
-                    lvi.iSubItem = 1;
-                    lvi.pszText = it->second == SongLibrary::Folder ? TEXT ( "No" ) : TEXT ( "Yes" );
-                    SendMessage( hWndLibrary, LVM_SETITEM, 0, ( LPARAM )&lvi );
-                }
-            }
-
+            SetLibraryProc( hWnd, cLibrary );
             return TRUE;
         }
         case WM_COMMAND:

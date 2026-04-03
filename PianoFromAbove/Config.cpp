@@ -76,6 +76,21 @@ void Config::LoadConfigValues()
     LoadConfigValues( txRoot );
 }
 
+bool Config::LoadConfigValues( const string &sFilename )
+{
+    TiXmlDocument doc( sFilename );
+    if ( !doc.LoadFile() ) return false;
+
+    TiXmlElement *txRoot = doc.FirstChildElement();
+    if ( !txRoot ) return false;
+
+    m_SongLibrary.clear();
+    LoadDefaultValues();
+    LoadConfigValues( txRoot );
+    m_SongLibrary.ExpandSources();
+    return true;
+}
+
 void Config::LoadConfigValues( TiXmlElement *txRoot )
 {
     m_VisualSettings.LoadConfigValues( txRoot );
