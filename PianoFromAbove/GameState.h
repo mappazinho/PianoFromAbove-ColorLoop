@@ -92,6 +92,7 @@ public:
 private:
     void InitNotes( const vector< MIDIEvent* > &vEvents );
     void InitState();
+    void RefreshTrackColors();
     void ColorChannel( int iTrack, int iChannel, unsigned int iColor, bool bRandom = false );
     void SetChannelSettings( const vector< bool > &vScored, const vector< bool > &vMuted, const vector< bool > &vHidden, const vector< unsigned > &vColor );
 
@@ -248,6 +249,7 @@ private:
     void InitLabels();
     void InitState();
     void InitLearning( bool bResetMinTime = true );
+    void RefreshTrackColors();
 
     // Logic
     void UpdateState( int iPos );

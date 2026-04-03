@@ -59,6 +59,93 @@ VOID Changed( HWND hWnd )
     SendMessage( GetParent( hWnd ), PSM_CHANGED, ( WPARAM )hWnd, 0 );
 }
 
+namespace
+{
+    const int TrackColorCount = 16;
+    unsigned int g_aTrackColors[TrackColorCount] = { 0 };
+    COLORREF g_acrCustClr[16] =
+    {
+        0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF,
+        0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF,
+        0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF,
+        0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF
+    };
+
+    VOID DrawColorButton( LPDRAWITEMSTRUCT pdis )
+    {
+        SetDCBrushColor( pdis->hDC, ( COLORREF )GetWindowLongPtr( pdis->hwndItem, GWLP_USERDATA ) );
+        FillRect( pdis->hDC, &pdis->rcItem, ( HBRUSH )GetStockObject( DC_BRUSH ) );
+        FrameRect( pdis->hDC, &pdis->rcItem, ( HBRUSH )GetStockObject( BLACK_BRUSH ) );
+    }
+
+    BOOL ChooseTrackColor( HWND hWndOwner, unsigned int &iColor )
+    {
+        CHOOSECOLOR cc = { 0 };
+        cc.lStructSize = sizeof( cc );
+        cc.hwndOwner = hWndOwner;
+        cc.lpCustColors = ( LPDWORD )g_acrCustClr;
+        cc.rgbResult = iColor;
+        cc.Flags = CC_FULLOPEN | CC_RGBINIT;
+        if ( !ChooseColor( &cc ) ) return FALSE;
+
+        iColor = cc.rgbResult;
+        return TRUE;
+    }
+
+    VOID SyncTrackColors( const unsigned int *pColors )
+    {
+        for ( int i = 0; i < TrackColorCount; i++ )
+            g_aTrackColors[i] = pColors[i];
+    }
+
+    VOID UpdateTrackColorButtons( HWND hWnd )
+    {
+        for ( int i = 0; i < TrackColorCount; i++ )
+        {
+            HWND hWndBtn = GetDlgItem( hWnd, IDC_TRACKCOLOR1 + i );
+            if ( !hWndBtn ) continue;
+            SetWindowLongPtr( hWndBtn, GWLP_USERDATA, g_aTrackColors[i] );
+            InvalidateRect( hWndBtn, NULL, FALSE );
+        }
+    }
+
+    VOID SetRainbowTrackColors()
+    {
+        int R, G, B;
+        for ( int i = 0; i < TrackColorCount; i++ )
+        {
+            Util::HSVtoRGB( 360 * i / TrackColorCount, 100, 100, R, G, B );
+            g_aTrackColors[i] = RGB( R, G, B );
+        }
+    }
+
+    VOID SaveTrackColors( bool bSaveConfig, bool bRefreshGame )
+    {
+        Config &config = Config::GetConfig();
+        VisualSettings cVisual = config.GetVisualSettings();
+
+        for ( int i = 0; i < TrackColorCount; i++ )
+            cVisual.colors[i] = g_aTrackColors[i];
+
+        config.SetVisualSettings( cVisual );
+        if ( bSaveConfig ) config.SaveConfigValues();
+        if ( bRefreshGame ) HandOffMsg( WM_COMMAND, ID_VISUAL_TRACKCOLORS_CHANGED, 0 );
+    }
+
+    VOID CenterDialogToOwner( HWND hWnd, HWND hWndOwner )
+    {
+        if ( !hWndOwner ) return;
+
+        RECT rcDlg, rcOwner;
+        GetClientRect( hWnd, &rcDlg );
+        GetWindowRect( hWndOwner, &rcOwner );
+        SetWindowPos( hWnd, NULL,
+            rcOwner.left + ( rcOwner.right - rcOwner.left - rcDlg.right ) / 2,
+            rcOwner.top + ( rcOwner.bottom - rcOwner.top - rcDlg.bottom ) / 2,
+            0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOREDRAW | SWP_NOACTIVATE );
+    }
+}
+
 INT_PTR WINAPI VisualProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 {
     static bool bCanRead = false;
@@ -93,11 +180,10 @@ INT_PTR WINAPI VisualProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
         case WM_DRAWITEM:
         {
             LPDRAWITEMSTRUCT pdis = (LPDRAWITEMSTRUCT)lParam;
-            if ( ( pdis->CtlID < IDC_COLOR1 || pdis->CtlID > IDC_COLOR6 ) && pdis->CtlID != IDC_BKGCOLOR )
+            if ( pdis->CtlID != IDC_BKGCOLOR )
                 return FALSE;
 
-            SetDCBrushColor( pdis->hDC, (COLORREF)GetWindowLongPtr( pdis->hwndItem, GWLP_USERDATA ) );
-            FillRect( pdis->hDC, &pdis->rcItem, ( HBRUSH )GetStockObject( DC_BRUSH ) );
+            DrawColorButton( pdis );
             return TRUE;
         }
         case WM_COMMAND:
@@ -130,26 +216,15 @@ INT_PTR WINAPI VisualProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
                     SendMessage( hWndLastKey, CB_SETCURSEL, ( iResult & 0xFF ) - MIDI::A0, 0 );
                     return TRUE;
                 }
-                // Color buttons. Pop up color choose dialog and set color.
-                case IDC_COLOR1: case IDC_COLOR2: case IDC_COLOR3:
-                case IDC_COLOR4: case IDC_COLOR5: case IDC_COLOR6: 
+                case IDC_TRACKCOLORS:
+                    DialogBoxParam( g_hInstance, MAKEINTRESOURCE( IDD_TRACKCOLORS ), hWnd, TrackColorsProc, ( LPARAM )hWnd );
+                    return TRUE;
                 case IDC_BKGCOLOR:
                 {
-                    static COLORREF acrCustClr[16] = { 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 
-                                                       0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF, 0x00FFFFFF }; 
                     HWND hWndBtn = ( HWND )lParam;
-
-                    // Choose and save the color
-                    CHOOSECOLOR cc = { 0 };
-                    cc.lStructSize = sizeof( cc );
-                    cc.hwndOwner = hWnd;
-                    cc.lpCustColors = (LPDWORD) acrCustClr;
-                    cc.rgbResult = (COLORREF)GetWindowLongPtr( hWndBtn, GWLP_USERDATA );
-                    cc.Flags = CC_FULLOPEN | CC_RGBINIT;
-                    if ( !ChooseColor( &cc ) ) return TRUE;
-
-                    // Draw the button (indirect)
-                    SetWindowLongPtr( hWndBtn, GWLP_USERDATA, cc.rgbResult );
+                    unsigned int iColor = ( unsigned int )GetWindowLongPtr( hWndBtn, GWLP_USERDATA );
+                    if ( !ChooseTrackColor( hWnd, iColor ) ) return TRUE;
+                    SetWindowLongPtr( hWndBtn, GWLP_USERDATA, iColor );
                     InvalidateRect( hWndBtn, NULL, FALSE );
                     return TRUE;
                 }
@@ -202,8 +277,8 @@ INT_PTR WINAPI VisualProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
                     cVisual.bAssociateFiles = ( IsDlgButtonChecked( hWnd, IDC_ASSOCIATEFILES ) == BST_CHECKED );
                     cVisual.iFirstKey = (int)SendMessage( GetDlgItem( hWnd, IDC_FIRSTKEY ), CB_GETCURSEL, 0, 0 ) + MIDI::A0;
                     cVisual.iLastKey = (int)SendMessage( GetDlgItem( hWnd, IDC_LASTKEY ), CB_GETCURSEL, 0, 0 ) + MIDI::A0;
-                    for ( int i = 0; i < IDC_COLOR6 - IDC_COLOR1 + 1; i++ )
-                        cVisual.colors[i] = (int)GetWindowLongPtr( GetDlgItem( hWnd, IDC_COLOR1 + i ), GWLP_USERDATA );
+                    for ( int i = 0; i < TrackColorCount; i++ )
+                        cVisual.colors[i] = g_aTrackColors[i];
                     cVisual.iBkgColor = (int)GetWindowLongPtr( GetDlgItem( hWnd, IDC_BKGCOLOR ), GWLP_USERDATA );
 
                     // Report success and return
@@ -235,10 +310,61 @@ VOID SetVisualProc( HWND hWnd, const VisualSettings &cVisual )
     SendMessage( hWndFirstKey, CB_SETCURSEL, cVisual.iFirstKey - MIDI::A0, 0 );
     SendMessage( hWndLastKey, CB_SETCURSEL, cVisual.iLastKey - MIDI::A0, 0 );
 
-    // Colors
-    for ( int i = 0; i < IDC_COLOR6 - IDC_COLOR1 + 1; i++ )
-        SetWindowLongPtr( GetDlgItem( hWnd, IDC_COLOR1 + i ), GWLP_USERDATA, cVisual.colors[i] );
+    SyncTrackColors( cVisual.colors );
     SetWindowLongPtr( GetDlgItem( hWnd, IDC_BKGCOLOR ), GWLP_USERDATA, cVisual.iBkgColor );
+    InvalidateRect( GetDlgItem( hWnd, IDC_BKGCOLOR ), NULL, FALSE );
+}
+
+INT_PTR WINAPI TrackColorsProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
+{
+    switch ( msg )
+    {
+        case WM_INITDIALOG:
+            SetWindowLongPtr( hWnd, GWLP_USERDATA, lParam );
+            CenterDialogToOwner( hWnd, ( HWND )lParam );
+            UpdateTrackColorButtons( hWnd );
+            return TRUE;
+        case WM_DRAWITEM:
+        {
+            LPDRAWITEMSTRUCT pdis = ( LPDRAWITEMSTRUCT )lParam;
+            if ( pdis->CtlID < IDC_TRACKCOLOR1 || pdis->CtlID > IDC_TRACKCOLOR16 )
+                return FALSE;
+
+            DrawColorButton( pdis );
+            return TRUE;
+        }
+        case WM_COMMAND:
+        {
+            int iId = LOWORD( wParam );
+            HWND hWndOwner = ( HWND )GetWindowLongPtr( hWnd, GWLP_USERDATA );
+            if ( iId >= IDC_TRACKCOLOR1 && iId <= IDC_TRACKCOLOR16 )
+            {
+                int iIndex = iId - IDC_TRACKCOLOR1;
+                if ( !ChooseTrackColor( hWnd, g_aTrackColors[iIndex] ) ) return TRUE;
+                UpdateTrackColorButtons( hWnd );
+                SaveTrackColors( true, true );
+                if ( hWndOwner ) Changed( hWndOwner );
+                return TRUE;
+            }
+
+            switch ( iId )
+            {
+                case IDC_RAINBOW:
+                    SetRainbowTrackColors();
+                    UpdateTrackColorButtons( hWnd );
+                    SaveTrackColors( true, true );
+                    if ( hWndOwner ) Changed( hWndOwner );
+                    return TRUE;
+                case IDOK:
+                case IDCANCEL:
+                    EndDialog( hWnd, iId );
+                    return TRUE;
+            }
+            break;
+        }
+    }
+
+    return FALSE;
 }
 
 INT_PTR WINAPI NoteSpanProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
@@ -1007,8 +1133,7 @@ INT_PTR WINAPI TracksProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
             for ( int i = 0; i < mInfo.iNumChannels; i++ )
             {
                 vScored[i] = vMuted[i] = vHidden[i] = false;
-                if ( i < iMax ) vColors[i] = cVisual.colors[i];
-                else vColors[i] = Util::RandColor();
+                vColors[i] = cVisual.colors[i % iMax];
             }
             
             // Set up the columns of the list view
@@ -1112,8 +1237,7 @@ INT_PTR WINAPI TracksProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
                                 return TRUE;
                             case 6:
                                 for ( size_t i = 0; i < vColors.size(); i++ )
-                                    if ( i < iMax ) vColors[i] = cVisual.colors[i];
-                                    else vColors[i] = Util::RandColor();
+                                    vColors[i] = cVisual.colors[i % iMax];
                                 InvalidateRect( lpnmlv->hdr.hwndFrom, NULL, FALSE );
                                 return TRUE;
                         }

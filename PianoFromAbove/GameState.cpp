@@ -194,13 +194,20 @@ void SplashScreen::SetChannelSettings( const vector< bool > &vScored, const vect
         for ( int j = 0; j < 16; j++ )
             if ( mTrackInfo.aNoteCount[j] > 0 )
             {
-                if ( bColor && iPos < vColor.size() )
-                    ColorChannel( i, j, vColor[iPos] );
+                if ( bColor )
+                    ColorChannel( i, j, vColor[iPos % vColor.size()] );
                 else
                     ColorChannel( i, j, 0, true );
                 iPos++;
             }
     }
+}
+
+void SplashScreen::RefreshTrackColors()
+{
+    static const VisualSettings &cVisual = Config::GetConfig().GetVisualSettings();
+    SetChannelSettings( vector< bool >(), vector< bool >(), vector< bool >(),
+        vector< unsigned >( cVisual.colors, cVisual.colors + sizeof( cVisual.colors ) / sizeof( cVisual.colors[0] ) ) );
 }
 
 GameState::GameError SplashScreen::MsgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
@@ -218,6 +225,9 @@ GameState::GameError SplashScreen::MsgProc( HWND hWnd, UINT msg, WPARAM wParam, 
             {
                 case ID_CHANGESTATE:
                     m_pNextState = reinterpret_cast< GameState* >( lParam );
+                    return Success;
+                case ID_VISUAL_TRACKCOLORS_CHANGED:
+                    RefreshTrackColors();
                     return Success;
                 case ID_VIEW_RESETDEVICE:
                     m_pRenderer->ResetDevice();
@@ -768,10 +778,30 @@ void MainScreen::SetChannelSettings( const vector< bool > &vScored, const vector
                 ScoreChannel( i, j, bScored ? vScored[min( iPos, vScored.size() - 1 )] : false );
                 MuteChannel( i, j, bMuted ? vMuted[min( iPos, vMuted.size() - 1 )] : false );
                 HideChannel( i, j, bHidden ? vHidden[min( iPos, vHidden.size() - 1 )] : false );
-                if ( bColor && iPos < vColor.size() )
-                    ColorChannel( i, j, vColor[iPos] );
+                if ( bColor )
+                    ColorChannel( i, j, vColor[iPos % vColor.size()] );
                 else
                     ColorChannel( i, j, 0, true );
+                iPos++;
+            }
+    }
+}
+
+void MainScreen::RefreshTrackColors()
+{
+    static const VisualSettings &cVisual = Config::GetConfig().GetVisualSettings();
+    const MIDI::MIDIInfo &mInfo = m_MIDI.GetInfo();
+    const vector< MIDITrack* > &vTracks = m_MIDI.GetTracks();
+    int iColorCount = sizeof( cVisual.colors ) / sizeof( cVisual.colors[0] );
+
+    size_t iPos = 0;
+    for ( int i = 0; i < mInfo.iNumTracks; i++ )
+    {
+        const MIDITrack::MIDITrackInfo &mTrackInfo = vTracks[i]->GetInfo();
+        for ( int j = 0; j < 16; j++ )
+            if ( mTrackInfo.aNoteCount[j] > 0 )
+            {
+                ColorChannel( i, j, cVisual.colors[iPos % iColorCount] );
                 iPos++;
             }
     }
@@ -796,6 +826,9 @@ GameState::GameError MainScreen::MsgProc( HWND hWnd, UINT msg, WPARAM wParam, LP
             {
                 case ID_CHANGESTATE:
                     m_pNextState = reinterpret_cast< GameState* >( lParam );
+                    return Success;
+                case ID_VISUAL_TRACKCOLORS_CHANGED:
+                    RefreshTrackColors();
                     return Success;
                 case ID_PLAY_STOP:
                     JumpTo( GetMinTime() );
