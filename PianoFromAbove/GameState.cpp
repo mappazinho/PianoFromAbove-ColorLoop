@@ -8,6 +8,7 @@
 * Copyright (c) 2010 Brian Pantano. All rights reserved.
 *
 *************************************************************************************************/
+#pragma warning(disable : 4267)
 #include <tchar.h>
 
 #include "Globals.h"

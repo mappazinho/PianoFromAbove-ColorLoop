@@ -17,6 +17,7 @@
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
 LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
 
 #ifdef APSTUDIO_INVOKED
 /////////////////////////////////////////////////////////////////////////////
@@ -71,10 +72,10 @@ BEGIN
     CONTROL         "&Don't hide controls toolbar in full screen mode",IDC_SHOWCONTROLS,
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,64,161,10
     PUSHBUTTON      "Track Colors",IDC_TRACKCOLORS,7,78,68,14
-    LTEXT           "Background color:",IDC_STATIC,155,82,58,8
-    CONTROL         "",IDC_BKGCOLOR,"Button",BS_OWNERDRAW,217,80,13,12,WS_EX_CLIENTEDGE
-    PUSHBUTTON      "Load Config...",IDC_LOADCONFIG,150,191,69,14
-    PUSHBUTTON      "&Restore Defaults",IDC_RESTOREDEFAULTS,226,191,69,14
+    LTEXT           "Background color:",IDC_STATIC,7,102,58,8
+    CONTROL         "",IDC_BKGCOLOR,"Button",BS_OWNERDRAW,69,100,13,12,WS_EX_CLIENTEDGE
+    PUSHBUTTON      "Load Config...",IDC_LOADCONFIG,7,191,69,14
+    PUSHBUTTON      "&Restore Defaults",IDC_RESTOREDEFAULTS,89,191,69,14
 END
 
 IDD_TRACKCOLORS DIALOGEX 0, 0, 181, 166
@@ -238,12 +239,12 @@ STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSM
 CAPTION "Piano From Above"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    CONTROL         "",IDC_STATIC,"Static",SS_WHITERECT,0,1,234,147
+    CONTROL         "",IDC_STATIC,"Static",SS_WHITERECT,0,0,234,148
     CONTROL         "",IDC_PICTURE,"Static",SS_BITMAP,0,0,15,13
-    LTEXT           "Piano From Above 1.1.0\nÂ©2010 Brian Pantano",IDC_STATIC,88,7,139,21
-    LTEXT           "Enjoy",IDC_LICENSE,88,40,139,12
+    LTEXT           "Piano From Above                                          ©2010 Brian Pantano",IDC_STATIC,88,7,139,21
+    LTEXT           "Enjoy, fork by @mappazinho",IDC_LICENSE,88,40,139,12
     CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,1,147,233,1
-    DEFPUSHBUTTON   "OK",IDOK,177,151,50,14
+    DEFPUSHBUTTON   "OK",IDOK,87,151,50,14
 END
 
 
